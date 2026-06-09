@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="智勝六合彩">
+<title>智勝六合彩 smart_win_marksix</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang TC', 'Noto Sans TC', sans-serif;
+    background: #0a1628;
+    min-height: 100vh;
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: 1.5rem 1rem 3rem;
+  }
+  .wrapper { width: 100%; max-width: 680px; }
+
+  /* Header */
+  .header { text-align: center; margin-bottom: 1.2rem; }
+  .header h1 { font-size: 26px; font-weight: 800; color: #f5c842; text-shadow: 0 2px 12px rgba(245,200,66,0.4); line-height: 1.2; }
+  .header p  { font-size: 12px; color: #4a7aaa; margin-top: 4px; letter-spacing: 0.08em; }
+
+  /* Legend */
+  .legend { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 1rem; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #7a9cc4; }
+  .legend-dot { width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0; }
+  .ld-red   { background: radial-gradient(circle at 35% 35%, #ff6b6b, #cc1c1c); }
+  .ld-blue  { background: radial-gradient(circle at 35% 35%, #5eb8ff, #1455b8); }
+  .ld-green { background: radial-gradient(circle at 35% 35%, #5de06a, #1a8c28); }
+
+  /* Probability mode toggle */
+  .mode-bar {
+    display: flex; align-items: center; justify-content: center;
+    gap: 8px; margin-bottom: 1rem; flex-wrap: wrap;
+  }
+  .mode-label { font-size: 12px; color: #4a7aaa; }
+  .mode-toggle {
+    display: flex; background: #0e2040;
+    border: 1px solid #1e3a5f; border-radius: 30px; overflow: hidden;
+  }
+  .mode-btn {
+    font-size: 12px; font-weight: 700;
+    padding: 7px 14px; border: none; cursor: pointer;
+    background: transparent; color: #4a7aaa;
+    transition: background 0.2s, color 0.2s;
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+    white-space: nowrap;
+  }
+  .mode-btn.active-equal { background: #1e3a5f; color: #aad4ff; }
+  .mode-btn.active-hot   { background: #7a1a1a; color: #ffaaaa; }
+  .mode-btn.active-cold  { background: #0a2a5a; color: #aaddff; }
+  .mode-desc { font-size: 11px; color: #4a7aaa; text-align: center; min-height: 16px; }
+
+  /* Stats bar */
+  .stats-bar {
+    background: #0e2040; border: 1px solid #1e3a5f;
+    border-radius: 12px; padding: 10px 14px;
+    margin-bottom: 1rem; display: none;
+  }
+  .stats-bar.visible { display: block; }
+  .stats-title { font-size: 11px; color: #4a7aaa; letter-spacing: 0.08em; margin-bottom: 8px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
+  .stat-cell {
+    aspect-ratio: 1; border-radius: 4px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 700; cursor: default;
+    position: relative;
+  }
+  .stat-num { font-size: 10px; line-height: 1; }
+  .stat-cnt { font-size: 8px; opacity: 0.75; line-height: 1; margin-top: 1px; }
+
+  /* Stage */
+  .stage {
+    background: linear-gradient(160deg, #0e2040 0%, #0a1628 100%);
+    border: 1px solid #1e3a5f; border-radius: 20px;
+    padding: 1.5rem 1.2rem; margin-bottom: 1rem;
+    min-height: 130px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    position: relative; overflow: hidden;
+  }
+  .stage::before {
+    content: ''; position: absolute; top: -40px; left: 50%; transform: translateX(-50%);
+    width: 300px; height: 80px;
+    background: radial-gradient(ellipse, rgba(245,200,66,0.07) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .stage-label { font-size: 11px; color: #4a7aaa; letter-spacing: 0.1em; margin-bottom: 14px; }
+  .balls-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; align-items: center; min-height: 72px; }
+
+  /* Ball */
+  .ball {
+    width: 64px; height: 64px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 19px; font-weight: 800;
+    position: relative; opacity: 0;
+    transform: translateY(-30px) scale(0.5);
+    cursor: default; user-select: none; flex-shrink: 0;
+  }
+  .ball.visible {
+    opacity: 1; transform: translateY(0) scale(1);
+    transition: opacity 0.35s ease, transform 0.45s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  .ball::before {
+    content: ''; position: absolute; top: 9px; left: 13px;
+    width: 16px; height: 9px; background: rgba(255,255,255,0.52);
+    border-radius: 50%; transform: rotate(-25deg); pointer-events: none;
+  }
+  .ball.extra { box-shadow: 0 0 0 4px #f5c842, 0 0 18px rgba(245,200,66,0.5); }
+  .c-red   { background: radial-gradient(circle at 35% 35%, #ff6b6b, #cc1c1c); color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+  .c-blue  { background: radial-gradient(circle at 35% 35%, #5eb8ff, #1455b8); color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+  .c-green { background: radial-gradient(circle at 35% 35%, #5de06a, #1a8c28); color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+
+  /* Status */
+  .status { font-size: 13px; color: #7a9cc4; text-align: center; min-height: 20px; margin-bottom: 1rem; }
+  .status.result { color: #f5c842; font-weight: 700; font-size: 14px; }
+  .status.error  { color: #ff6b6b; font-weight: 600; }
+
+  /* Params panel */
+  .params-panel { background: #0e2040; border: 1px solid #1e3a5f; border-radius: 16px; padding: 1rem 1.2rem; margin-bottom: 1.2rem; }
+  .params-title { font-size: 12px; color: #4a7aaa; letter-spacing: 0.08em; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+  .params-title span { flex: 1; }
+  .params-title button { font-size: 11px; color: #4a7aaa; background: none; border: none; cursor: pointer; padding: 2px 6px; border-radius: 6px; touch-action: manipulation; }
+  .params-title button:hover { color: #aad4ff; background: #1e3a5f; }
+  .param-group { margin-bottom: 14px; }
+  .param-group:last-child { margin-bottom: 0; }
+  .param-label { font-size: 12px; color: #7a9cc4; margin-bottom: 7px; display: block; }
+  .param-label strong { color: #aad4ff; }
+  .num-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; }
+  .num-btn {
+    aspect-ratio: 1; border-radius: 50%; font-size: 11px; font-weight: 700;
+    border: none; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    opacity: 0.45; transition: opacity 0.15s, transform 0.1s;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation; padding: 0;
+  }
+  .num-btn.selected { opacity: 1; transform: scale(1.12); }
+  .num-btn:active { transform: scale(0.92); }
+  .constraint-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .constraint-row label { font-size: 12px; color: #7a9cc4; white-space: nowrap; }
+  .constraint-row select, .constraint-row input {
+    font-size: 13px; padding: 6px 8px; border-radius: 8px;
+    border: 1px solid #1e3a5f; background: #0a1628; color: #aad4ff;
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  }
+  .constraint-row input[type=number] { width: 60px; text-align: center; }
+  .constraint-row select { flex: 1; min-width: 80px; }
+  .fixed-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; min-height: 20px; }
+  .fixed-tag { display: flex; align-items: center; gap: 4px; border-radius: 20px; padding: 3px 8px 3px 4px; font-size: 12px; font-weight: 700; color: #fff; }
+  .fixed-tag .rm { cursor: pointer; opacity: 0.7; font-size: 13px; line-height: 1; }
+
+  /* Speed + controls */
+  .speed-row { display: flex; align-items: center; gap: 10px; justify-content: center; margin-bottom: 1rem; }
+  .speed-row label { font-size: 13px; color: #7a9cc4; }
+  .speed-row select { font-size: 13px; padding: 6px 10px; border-radius: 8px; border: 1px solid #1e3a5f; background: #0e2040; color: #aad4ff; cursor: pointer; touch-action: manipulation; }
+  .controls { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 1.25rem; }
+  .btn { font-size: 15px; font-weight: 700; padding: 13px 30px; min-height: 52px; border-radius: 50px; cursor: pointer; border: none; transition: transform 0.1s, box-shadow 0.1s, opacity 0.2s; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  .btn:active { transform: scale(0.96); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+  .btn-draw { background: linear-gradient(135deg, #f5c842, #e6a800); color: #1a0e00; box-shadow: 0 4px 18px rgba(245,200,66,0.35); }
+  .btn-draw:hover:not(:disabled) { box-shadow: 0 6px 24px rgba(245,200,66,0.55); }
+  .btn-reset { background: transparent; color: #7a9cc4; border: 1px solid #1e3a5f; }
+  .btn-reset:hover:not(:disabled) { background: #1e3a5f; color: #aad4ff; }
+
+  /* History */
+  .history-section { display: none; }
+  .history-label { font-size: 11px; color: #4a7aaa; letter-spacing: 0.1em; margin-bottom: 10px; text-align: center; }
+  .history-list { display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; }
+  .history-list::-webkit-scrollbar { width: 4px; }
+  .history-list::-webkit-scrollbar-thumb { background: #1e3a5f; border-radius: 4px; }
+  .history-row { display: flex; align-items: center; gap: 10px; background: #0e2040; border: 1px solid #1e3a5f; border-radius: 12px; padding: 8px 14px; }
+  .history-idx { font-size: 12px; color: #4a7aaa; min-width: 24px; }
+  .mini-balls { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+  .mini-ball { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; position: relative; }
+  .mini-ball::before { content: ''; position: absolute; top: 4px; left: 6px; width: 7px; height: 4px; background: rgba(255,255,255,0.5); border-radius: 50%; transform: rotate(-20deg); }
+  .mini-ball.extra { box-shadow: 0 0 0 2px #f5c842; }
+  .extra-label { font-size: 11px; color: #f5c842; margin-left: 2px; white-space: nowrap; }
+
+  /* Affiliate */
+  .affiliate-section { margin-top: 2rem; }
+  .affiliate-label { font-size: 11px; color: #4a7aaa; letter-spacing: 0.1em; text-align: center; margin-bottom: 10px; }
+  .affiliate-grid { display: flex; flex-direction: column; gap: 10px; }
+  .affiliate-banner { display: flex; align-items: center; gap: 14px; background: #0e2040; border: 1px solid #1e3a5f; border-radius: 14px; padding: 14px 16px; text-decoration: none; transition: border-color 0.2s, background 0.2s; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  .affiliate-banner:hover { border-color: #f5c842; background: #122540; }
+  .affiliate-icon { font-size: 28px; flex-shrink: 0; width: 48px; height: 48px; background: #1a3055; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+  .affiliate-text { flex: 1; }
+  .affiliate-title { font-size: 14px; font-weight: 700; color: #aad4ff; margin-bottom: 3px; }
+  .affiliate-desc  { font-size: 12px; color: #4a7aaa; line-height: 1.4; }
+  .affiliate-cta { font-size: 12px; font-weight: 700; color: #f5c842; white-space: nowrap; border: 1px solid #f5c84255; border-radius: 20px; padding: 5px 10px; flex-shrink: 0; }
+  .divider { border: none; border-top: 1px solid #1e3a5f; margin: 1.8rem 0; }
+  .donation-section { text-align: center; margin-bottom: 2rem; }
+  .donation-title { font-size: 14px; font-weight: 700; color: #aad4ff; margin-bottom: 6px; }
+  .donation-desc { font-size: 12px; color: #4a7aaa; margin-bottom: 14px; line-height: 1.5; }
+  .btn-paypal { display: inline-flex; align-items: center; gap: 8px; background: #0070ba; color: #fff; font-size: 15px; font-weight: 700; padding: 13px 28px; border-radius: 50px; text-decoration: none; border: none; cursor: pointer; box-shadow: 0 4px 18px rgba(0,112,186,0.4); transition: background 0.15s, transform 0.1s; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  .btn-paypal:hover { background: #005ea6; }
+  .btn-paypal:active { transform: scale(0.96); }
+  .footer { text-align: center; font-size: 11px; color: #2a4a6a; padding-bottom: 1rem; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <div class="header">
+    <h1>🎱 智勝六合彩</h1>
+    <p>smart_win_marksix · 1–49 · 六個正碼 + 一個特別號</p>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot ld-red"></div>紅色</div>
+    <div class="legend-item"><div class="legend-dot ld-blue"></div>藍色</div>
+    <div class="legend-item"><div class="legend-dot ld-green"></div>綠色</div>
+    <div class="legend-item" style="color:#f5c842">⬤ = 特別號</div>
+  </div>
+
+  <!-- Probability mode -->
+  <div class="mode-bar">
+    <span class="mode-label">開獎模式：</span>
+    <div class="mode-toggle">
+      <button class="mode-btn active-equal" id="mode-equal" onclick="setMode('equal')">⚖️ 均等</button>
+      <button class="mode-btn" id="mode-hot"   onclick="setMode('hot')">🔥 熱號優先</button>
+      <button class="mode-btn" id="mode-cold"  onclick="setMode('cold')">❄️ 冷號優先</button>
+    </div>
+  </div>
+  <p class="mode-desc" id="mode-desc">每個號碼機率相同（1/49）</p>
+
+  <!-- Stats heatmap -->
+  <div class="stats-bar" id="stats-bar">
+    <div class="stats-title" id="stats-title">📊 歷史出現次數</div>
+    <div class="stats-grid" id="stats-grid"></div>
+  </div>
+
+  <div class="stage">
+    <div class="stage-label">開獎結果</div>
+    <div class="balls-row" id="balls-row">
+      <span style="font-size:13px;color:#2a4a6a;">等待開獎…</span>
+    </div>
+  </div>
+
+  <p class="status" id="status">載入歷史數據中…</p>
+
+  <!-- Parameters -->
+  <div class="params-panel">
+    <div class="params-title">
+      <span>⚙️ 開獎條件設定</span>
+      <button onclick="clearAll()">全部清除</button>
+    </div>
+    <div class="param-group">
+      <label class="param-label"><strong>指定號碼</strong>（點選你心儀的號碼，最多6個）</label>
+      <div class="num-grid" id="num-grid"></div>
+      <div class="fixed-tags" id="fixed-tags"></div>
+    </div>
+    <div class="param-group">
+      <label class="param-label"><strong>顏色條件</strong>（正碼中至少包含幾個某顏色的球）</label>
+      <div class="constraint-row">
+        <label>至少</label>
+        <input type="number" id="color-count" min="1" max="6" value="1">
+        <label>個</label>
+        <select id="color-sel">
+          <option value="">（不限）</option>
+          <option value="red">紅色球</option>
+          <option value="blue">藍色球</option>
+          <option value="green">綠色球</option>
+        </select>
+      </div>
+    </div>
+    <div class="param-group">
+      <label class="param-label"><strong>號碼範圍條件</strong>（正碼中至少包含幾個某範圍的號碼）</label>
+      <div class="constraint-row">
+        <label>至少</label>
+        <input type="number" id="range-count" min="1" max="6" value="1">
+        <label>個號碼</label>
+        <select id="range-sel">
+          <option value="">（不限）</option>
+          <option value="lte25">25或以下</option>
+          <option value="gt25">大於25</option>
+          <option value="lte30">30或以下</option>
+          <option value="gt30">大於30</option>
+          <option value="lte35">35或以下</option>
+          <option value="gt35">大於35</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="speed-row">
+    <label>開獎速度：</label>
+    <select id="speed-sel">
+      <option value="1200">慢速</option>
+      <option value="700" selected>正常</option>
+      <option value="250">快速</option>
+      <option value="50">即時</option>
+    </select>
+  </div>
+
+  <div class="controls">
+    <button class="btn btn-draw" id="draw-btn" onclick="startDraw()">🎱 開獎</button>
+    <button class="btn btn-reset" id="reset-btn" onclick="resetDraw()" disabled>重置</button>
+  </div>
+
+  <div class="history-section" id="history-section">
+    <p class="history-label">歷史開獎記錄</p>
+    <div class="history-list" id="history-list"></div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- Affiliate Banners -->
+  <div class="affiliate-section">
+    <p class="affiliate-label">🔗 推薦資訊</p>
+    <div class="affiliate-grid">
+      <a class="affiliate-banner" href="#" target="_blank" rel="noopener">
+        <div class="affiliate-icon">📊</div>
+        <div class="affiliate-text">
+          <div class="affiliate-title">六合彩歷史數據查詢</div>
+          <div class="affiliate-desc">查閱過往開獎記錄，分析號碼出現頻率</div>
+        </div>
+        <div class="affiliate-cta">了解更多 →</div>
+      </a>
+      <a class="affiliate-banner" href="#" target="_blank" rel="noopener">
+        <div class="affiliate-icon">📱</div>
+        <div class="affiliate-text">
+          <div class="affiliate-title">智勝六合彩 Instagram</div>
+          <div class="affiliate-desc">追蹤我們的IG，獲取最新貼士及預測</div>
+        </div>
+        <div class="affiliate-cta">立即追蹤 →</div>
+      </a>
+      <a class="affiliate-banner" href="#" target="_blank" rel="noopener">
+        <div class="affiliate-icon">🎯</div>
+        <div class="affiliate-text">
+          <div class="affiliate-title">推薦商品或服務名稱</div>
+          <div class="affiliate-desc">在此填入你的聯盟行銷產品描述文字</div>
+        </div>
+        <div class="affiliate-cta">查看詳情 →</div>
+      </a>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <div class="donation-section">
+    <div class="donation-title">☕ 支持智勝六合彩</div>
+    <div class="donation-desc">如果這個工具對你有幫助，<br>歡迎請我喝杯咖啡，支持持續更新！</div>
+    <a class="btn-paypal" href="https://paypal.me/allegohk" target="_blank" rel="noopener">
+      💛 用PayPal支持我
+    </a>
+  </div>
+
+  <div class="footer">
+    © 智勝六合彩 smart_win_marksix · 本工具僅供娛樂參考，不構成投注建議<br>
+    <a href="https://paypal.me/allegohk" target="_blank" style="color:#2a4a6a;">PayPal: paypal.me/allegohk</a>
+  </div>
+
+</div>
+
+<script>
+// ── Colour mapping ──────────────────────────────────────────────
+const BALL_COLOR = {
+   1:'red',  2:'red',  3:'blue', 4:'blue', 5:'green',6:'green',
+   7:'red',  8:'red',  9:'blue', 10:'blue',
+  11:'green',12:'red', 13:'red', 14:'blue',15:'blue', 16:'green',
+  17:'green',18:'red', 19:'red', 20:'blue',
+  21:'green',22:'green',23:'red', 24:'red', 25:'blue', 26:'blue',
+  27:'green',28:'green',29:'red', 30:'red',
+  31:'blue', 32:'green',33:'green',34:'red', 35:'red', 36:'blue',
+  37:'blue', 38:'green',39:'green',40:'red',
+  41:'blue', 42:'blue',43:'green',44:'green',45:'red', 46:'red',
+  47:'blue', 48:'blue', 49:'green'
+};
+function colorClass(n) { return 'c-' + BALL_COLOR[n]; }
+function ballBg(n) {
+  const c = BALL_COLOR[n];
+  if (c==='red')  return 'radial-gradient(circle at 35% 35%, #ff6b6b, #cc1c1c)';
+  if (c==='blue') return 'radial-gradient(circle at 35% 35%, #5eb8ff, #1455b8)';
+  return                 'radial-gradient(circle at 35% 35%, #5de06a, #1a8c28)';
+}
+
+// ── State ────────────────────────────────────────────────────────
+let freqMap = {};      // number → count from CSV
+let totalDraws = 0;
+let currentMode = 'equal';  // 'equal' | 'hot' | 'cold'
+let drawing = false;
+let history = [];
+const selectedFixed = new Set();
+
+// ── Load CSV ─────────────────────────────────────────────────────
+async function loadCSV() {
+  try {
+    const res = await fetch('history.csv');
+    if (!res.ok) throw new Error('not found');
+    const text = await res.text();
+    const lines = text.trim().split('\n').slice(1); // skip header
+    freqMap = {};
+    for (let n = 1; n <= 49; n++) freqMap[n] = 0;
+    lines.forEach(line => {
+      const parts = line.split(',');
+      if (parts.length < 7) return;
+      // columns: date,n1,n2,n3,n4,n5,n6,extra (all 7 balls count)
+      for (let i = 1; i <= 7; i++) {
+        const n = parseInt(parts[i]);
+        if (n >= 1 && n <= 49) freqMap[n] = (freqMap[n] || 0) + 1;
+      }
+    });
+    totalDraws = lines.length;
+    showStatus(`已載入 ${totalDraws} 期歷史數據，請按「開獎」`, '');
+    buildStatsGrid();
+  } catch(e) {
+    // CSV not found — fallback to equal
+    for (let n = 1; n <= 49; n++) freqMap[n] = 1;
+    totalDraws = 0;
+    showStatus('未找到 history.csv，使用均等模式', '');
+  }
+}
+
+// ── Probability weighting ─────────────────────────────────────────
+function buildWeights(mode, excludeSet) {
+  const pool = Array.from({length:49},(_,i)=>i+1).filter(n => !excludeSet.has(n));
+  if (mode === 'equal') {
+    return pool.map(n => ({ n, w: 1 }));
+  }
+  const counts = pool.map(n => ({ n, c: freqMap[n] || 0 }));
+  const maxC = Math.max(...counts.map(x => x.c)) || 1;
+  const minC = Math.min(...counts.map(x => x.c)) || 0;
+  const range = maxC - minC || 1;
+  return counts.map(({ n, c }) => {
+    // normalise 0–1 then boost to 0.2–1.8 range so rare/frequent balls
+    // have meaningful but not extreme bias
+    const norm = (c - minC) / range;  // 0=coldest, 1=hottest
+    const w = mode === 'hot' ? 0.2 + norm * 1.6 : 0.2 + (1 - norm) * 1.6;
+    return { n, w };
+  });
+}
+
+function weightedSample(weightedPool, count) {
+  const result = [];
+  let pool = [...weightedPool];
+  for (let i = 0; i < count; i++) {
+    const total = pool.reduce((s, x) => s + x.w, 0);
+    let r = Math.random() * total;
+    let idx = 0;
+    for (let j = 0; j < pool.length; j++) {
+      r -= pool[j].w;
+      if (r <= 0) { idx = j; break; }
+    }
+    result.push(pool[idx].n);
+    pool.splice(idx, 1);
+  }
+  return result;
+}
+
+// ── Constraint helpers ────────────────────────────────────────────
+function inRange(n, key) {
+  if (key==='lte25') return n<=25; if (key==='gt25') return n>25;
+  if (key==='lte30') return n<=30; if (key==='gt30') return n>30;
+  if (key==='lte35') return n<=35; if (key==='gt35') return n>35;
+  return true;
+}
+
+// ── Smart draw ────────────────────────────────────────────────────
+function pickNumbers() {
+  const colorFilter = document.getElementById('color-sel').value;
+  const colorCount  = parseInt(document.getElementById('color-count').value) || 0;
+  const rangeFilter = document.getElementById('range-sel').value;
+  const rangeCount  = parseInt(document.getElementById('range-count').value) || 0;
+  const fixedArr    = [...selectedFixed];
+  const needed      = 6 - fixedArr.length;
+
+  const fixedColorSat = colorFilter ? fixedArr.filter(n => BALL_COLOR[n]===colorFilter).length : 0;
+  const fixedRangeSat = rangeFilter ? fixedArr.filter(n => inRange(n,rangeFilter)).length : 0;
+  const stillNeedColor = colorFilter ? Math.max(0, colorCount - fixedColorSat) : 0;
+  const stillNeedRange = rangeFilter ? Math.max(0, rangeCount - fixedRangeSat) : 0;
+
+  for (let attempt = 0; attempt < 500; attempt++) {
+    const weights = buildWeights(currentMode, selectedFixed);
+    const drawn   = weightedSample(weights, needed);
+    const colorOk = colorFilter ? drawn.filter(n=>BALL_COLOR[n]===colorFilter).length >= stillNeedColor : true;
+    const rangeOk = rangeFilter ? drawn.filter(n=>inRange(n,rangeFilter)).length >= stillNeedRange : true;
+    if (colorOk && rangeOk) {
+      const all = [...fixedArr, ...drawn];
+      // Pick extra from remaining pool
+      const usedSet = new Set(all);
+      const extraWeights = buildWeights(currentMode, usedSet);
+      const extra = weightedSample(extraWeights, 1)[0];
+      return { main: all.sort((a,b)=>a-b), extra };
+    }
+  }
+  return null;
+}
+
+// ── Mode toggle ───────────────────────────────────────────────────
+const modeDescs = {
+  equal: '每個號碼機率相同（1/49）',
+  hot:   '🔥 出現次數越多，被抽中機率越高',
+  cold:  '❄️ 出現次數越少，被抽中機率越高'
+};
+function setMode(m) {
+  currentMode = m;
+  ['equal','hot','cold'].forEach(x => {
+    const btn = document.getElementById('mode-'+x);
+    btn.className = 'mode-btn' + (x===m ? ' active-'+x : '');
+  });
+  document.getElementById('mode-desc').textContent = modeDescs[m];
+  const bar = document.getElementById('stats-bar');
+  bar.classList.toggle('visible', m !== 'equal');
+}
+
+// ── Stats heatmap ─────────────────────────────────────────────────
+function buildStatsGrid() {
+  const grid = document.getElementById('stats-grid');
+  grid.innerHTML = '';
+  const counts = Object.values(freqMap);
+  const maxC = Math.max(...counts) || 1;
+  const minC = Math.min(...counts) || 0;
+  for (let n = 1; n <= 49; n++) {
+    const c = freqMap[n] || 0;
+    const norm = (c - minC) / (maxC - minC || 1);
+    const cell = document.createElement('div');
+    cell.className = 'stat-cell';
+    // colour intensity based on frequency
+    const alpha = 0.15 + norm * 0.75;
+    const bg = BALL_COLOR[n]==='red'
+      ? `rgba(200,40,40,${alpha})`
+      : BALL_COLOR[n]==='blue'
+      ? `rgba(30,100,200,${alpha})`
+      : `rgba(30,160,60,${alpha})`;
+    cell.style.background = bg;
+    cell.innerHTML = `<span class="stat-num">${n}</span><span class="stat-cnt">${c}次</span>`;
+    cell.title = `號碼 ${n}：出現 ${c} 次`;
+    grid.appendChild(cell);
+  }
+  document.getElementById('stats-title').textContent =
+    `📊 歷史出現次數（共 ${totalDraws} 期，顏色越深 = 出現越多）`;
+}
+
+// ── Number grid ───────────────────────────────────────────────────
+function buildGrid() {
+  const grid = document.getElementById('num-grid');
+  for (let n = 1; n <= 49; n++) {
+    const btn = document.createElement('button');
+    btn.className = 'num-btn ' + colorClass(n);
+    btn.id = 'nb-' + n;
+    btn.textContent = n;
+    btn.style.background = ballBg(n);
+    btn.style.color = '#fff';
+    btn.style.textShadow = '0 1px 2px rgba(0,0,0,0.5)';
+    btn.addEventListener('click', () => toggleFixed(n));
+    grid.appendChild(btn);
+  }
+}
+function toggleFixed(n) {
+  if (selectedFixed.has(n)) {
+    selectedFixed.delete(n);
+    document.getElementById('nb-'+n).classList.remove('selected');
+  } else {
+    if (selectedFixed.size >= 6) { showStatus('最多只能指定6個號碼','error'); return; }
+    selectedFixed.add(n);
+    document.getElementById('nb-'+n).classList.add('selected');
+  }
+  renderTags();
+}
+function renderTags() {
+  const c = document.getElementById('fixed-tags');
+  c.innerHTML = '';
+  [...selectedFixed].sort((a,b)=>a-b).forEach(n => {
+    const tag = document.createElement('div');
+    tag.className = 'fixed-tag';
+    tag.style.background = ballBg(n);
+    tag.innerHTML = `<span>${n}</span><span class="rm" onclick="toggleFixed(${n})">✕</span>`;
+    c.appendChild(tag);
+  });
+}
+function clearAll() {
+  selectedFixed.forEach(n => document.getElementById('nb-'+n).classList.remove('selected'));
+  selectedFixed.clear(); renderTags();
+  document.getElementById('color-sel').value = '';
+  document.getElementById('color-count').value = '1';
+  document.getElementById('range-sel').value = '';
+  document.getElementById('range-count').value = '1';
+  showStatus('條件已清除，請按「開獎」','');
+}
+
+// ── Draw animation ────────────────────────────────────────────────
+function showStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.className = 'status' + (type ? ' '+type : '');
+  el.textContent = msg;
+}
+async function startDraw() {
+  if (drawing) return;
+  const result = pickNumbers();
+  if (!result) { showStatus('⚠️ 條件衝突，無法產生符合的號碼，請調整條件','error'); return; }
+  drawing = true;
+  document.getElementById('draw-btn').disabled = true;
+  document.getElementById('reset-btn').disabled = true;
+  const row = document.getElementById('balls-row');
+  row.innerHTML = '';
+  const modeTag = currentMode==='hot' ? '🔥' : currentMode==='cold' ? '❄️' : '';
+  showStatus(`${modeTag} 開獎中…`,'');
+  const { main, extra } = result;
+  const speed = parseInt(document.getElementById('speed-sel').value);
+  const allNums = [...main, extra];
+  for (let i = 0; i < allNums.length; i++) {
+    await delay(i===0 ? 400 : speed);
+    const num = allNums[i];
+    const isExtra = i===6;
+    const isFixed = selectedFixed.has(num);
+    showStatus(isExtra ? '開出特別號…' : `開出第 ${i+1} 個正碼…`);
+    const ball = document.createElement('div');
+    ball.className = 'ball '+colorClass(num)+(isExtra?' extra':'');
+    ball.textContent = num;
+    if (isFixed && !isExtra) {
+      const star = document.createElement('span');
+      star.style.cssText = 'position:absolute;bottom:3px;right:5px;font-size:8px;opacity:0.8;';
+      star.textContent = '★';
+      ball.appendChild(star);
+    }
+    row.appendChild(ball);
+    await delay(30);
+    ball.style.transition = 'opacity 0.35s ease, transform 0.45s cubic-bezier(0.34,1.56,0.64,1)';
+    ball.style.opacity = '1';
+    ball.style.transform = 'translateY(0) scale(1)';
+  }
+  await delay(400);
+  showStatus(`結果：${main.join(' · ')}  ＋  特別號 ${extra}`,'result');
+  history.unshift({ main, extra });
+  renderHistory();
+  drawing = false;
+  document.getElementById('draw-btn').disabled = false;
+  document.getElementById('reset-btn').disabled = false;
+}
+function resetDraw() {
+  document.getElementById('balls-row').innerHTML = '<span style="font-size:13px;color:#2a4a6a;">等待開獎…</span>';
+  showStatus('請設定條件後按「開獎」','');
+}
+function renderHistory() {
+  const sec = document.getElementById('history-section');
+  const list = document.getElementById('history-list');
+  if (!history.length) { sec.style.display='none'; return; }
+  sec.style.display='block'; list.innerHTML='';
+  history.slice(0,10).forEach((h,idx) => {
+    const row = document.createElement('div'); row.className='history-row';
+    const idxEl = document.createElement('span'); idxEl.className='history-idx'; idxEl.textContent='#'+(idx+1); row.appendChild(idxEl);
+    const mr = document.createElement('div'); mr.className='mini-balls';
+    h.main.forEach(n => { const b=document.createElement('div'); b.className='mini-ball '+colorClass(n); b.textContent=n; mr.appendChild(b); });
+    const sep=document.createElement('span'); sep.style.cssText='color:#2a4a6a;font-size:14px;'; sep.textContent='+'; mr.appendChild(sep);
+    const eb=document.createElement('div'); eb.className='mini-ball extra '+colorClass(h.extra); eb.textContent=h.extra; mr.appendChild(eb);
+    const el=document.createElement('span'); el.className='extra-label'; el.textContent='特別'; mr.appendChild(el);
+    row.appendChild(mr); list.appendChild(row);
+  });
+}
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Init ──────────────────────────────────────────────────────────
+buildGrid();
+loadCSV();
+</script>
+</body>
+</html>
