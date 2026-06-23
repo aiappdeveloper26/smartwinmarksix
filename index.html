@@ -361,9 +361,9 @@ let history = [];
 const selectedFixed = new Set();
 
 // ── Load CSV ─────────────────────────────────────────────────────
-// ── 歷史數據 ── 在下方新增開獎記錄（格式：日期,n1,n2,n3,n4,n5,n6,特別號）
+// ── 歷史數據 ── 從 history.csv 讀取，以下為備用數據（CSV載入失敗時使用）
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const HISTORY_DATA = `2024-01-02,3,9,15,22,31,45,7
+const FALLBACK_DATA = `2024-01-02,3,9,15,22,31,45,7
 2024-01-06,1,12,19,28,33,47,4
 2024-01-09,5,14,23,30,38,42,11
 2024-01-13,2,8,17,25,36,49,20
@@ -470,20 +470,35 @@ const HISTORY_DATA = `2024-01-02,3,9,15,22,31,45,7
 2024-12-31,3,9,18,26,33,42,20`;
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-function loadCSV() {
-  const lines = HISTORY_DATA.trim().split('\n').filter(l => l.trim());
+function parseLines(text) {
+  const lines = text.trim().split('\n').filter(l => l.trim());
   freqMap = {};
   for (let n = 1; n <= 49; n++) freqMap[n] = 0;
   lines.forEach(line => {
     const parts = line.split(',');
     if (parts.length < 7) return;
+    // skip header row if present
+    if (parts[0].toLowerCase() === 'date') return;
     for (let i = 1; i <= 7; i++) {
       const n = parseInt(parts[i]);
       if (n >= 1 && n <= 49) freqMap[n] = (freqMap[n] || 0) + 1;
     }
   });
-  totalDraws = lines.length;
-  showStatus(`已載入 ${totalDraws} 期歷史數據，請按「開獎」`, '');
+  totalDraws = lines.filter(l => !l.startsWith('date')).length;
+}
+
+async function loadCSV() {
+  try {
+    const res = await fetch('history.csv?v=' + Date.now()); // cache-bust so updates show immediately
+    if (!res.ok) throw new Error('CSV not found');
+    const text = await res.text();
+    parseLines(text);
+    showStatus(`已從 history.csv 載入 ${totalDraws} 期數據，請按「開獎」`, '');
+  } catch (e) {
+    // Fallback to hardcoded data if CSV not available (e.g. running locally)
+    parseLines(FALLBACK_DATA);
+    showStatus(`已載入 ${totalDraws} 期備用數據，請按「開獎」`, '');
+  }
   buildStatsGrid();
 }
 
@@ -727,7 +742,7 @@ function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ── Init ──────────────────────────────────────────────────────────
 buildGrid();
-loadCSV();
+loadCSV(); // async — fetches history.csv from same folder
 </script>
 </body>
 </html>
