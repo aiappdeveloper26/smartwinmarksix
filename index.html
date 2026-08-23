@@ -215,8 +215,36 @@
       <button class="mode-btn" id="mode-hot"   onclick="setMode('hot')">🔥 熱號優先</button>
       <button class="mode-btn" id="mode-cold"  onclick="setMode('cold')">❄️ 冷號優先</button>
     </div>
+    <button id="adv-toggle-btn" onclick="toggleAdvanced()" title="進階設定" style="background:none;border:none;color:#4a7aaa;font-size:15px;cursor:pointer;padding:4px 6px;touch-action:manipulation;-webkit-tap-highlight-color:transparent;">⚙️</button>
   </div>
   <p class="mode-desc" id="mode-desc">每個號碼機率相同（1/49）</p>
+
+  <!-- Advanced weighting settings — hidden by default, revealed via the ⚙️ button -->
+  <div class="params-panel" id="adv-panel" style="display:none;">
+    <div class="params-title"><span>🎛️ 進階權重設定</span></div>
+    <div class="param-group">
+      <label class="param-label"><strong>分析期數</strong>（用最近幾期數據計算冷熱號）</label>
+      <div class="constraint-row">
+        <select id="lookback-sel" onchange="onAdvChange()" style="flex:1">
+          <option value="all">全部歷史期數</option>
+          <option value="10">最近 10 期</option>
+          <option value="20" selected>最近 20 期</option>
+          <option value="30">最近 30 期</option>
+          <option value="50">最近 50 期</option>
+          <option value="100">最近 100 期</option>
+        </select>
+      </div>
+    </div>
+    <div class="param-group">
+      <label class="param-label"><strong>權重強度</strong>：<span id="strength-val">80%</span>（0%＝跟均等一樣，100%＝最極端偏向冷／熱號）</label>
+      <div class="constraint-row">
+        <input type="range" id="strength-sel" min="0" max="100" value="80" step="5" style="flex:1" oninput="onStrengthInput()">
+      </div>
+    </div>
+    <div class="param-group" style="margin-bottom:0;">
+      <label class="param-label" style="margin-bottom:0;font-size:11px;color:#4a7aaa;">🔥 熱號優先預設：最近 20 期 / 80% 強度　·　❄️ 冷號優先預設：全部歷史 / 80% 強度。切換模式會自動套用對應預設，此處僅供手動微調。</label>
+    </div>
+  </div>
 
   <!-- Stats heatmap -->
   <div class="stats-bar" id="stats-bar">
@@ -353,9 +381,12 @@ function ballBg(n) {
 }
 
 // ── State ────────────────────────────────────────────────────────
-let freqMap = {};      // number → count from CSV
-let totalDraws = 0;
+let freqMap = {};      // number → count, computed for the CURRENT lookback window
+let totalDraws = 0;    // draws counted in the current lookback window
+let allDraws = [];     // ALL parsed draws, chronological oldest → newest: {date, main:[6], extra}
 let currentMode = 'equal';  // 'equal' | 'hot' | 'cold'
+let currentLookback = 20;   // number of most-recent draws to analyse, or 'all'
+let currentStrength = 80;   // 0–100, how aggressively hot/cold skews the weights
 let drawing = false;
 let history = [];
 const selectedFixed = new Set();
@@ -470,21 +501,59 @@ const FALLBACK_DATA = `2024-01-02,3,9,15,22,31,45,7
 2024-12-31,3,9,18,26,33,42,20`;
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+// Parse "2024-01-02" or "8/22/2026" (M/D/YYYY) into a comparable timestamp.
+function parseDate(str) {
+  str = str.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return new Date(str + 'T00:00:00').getTime();
+  const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return new Date(+m[3], +m[1]-1, +m[2]).getTime();
+  const t = Date.parse(str);
+  return isNaN(t) ? 0 : t;
+}
+
 function parseLines(text) {
-  const lines = text.trim().split('\n').filter(l => l.trim());
-  freqMap = {};
-  for (let n = 1; n <= 49; n++) freqMap[n] = 0;
+  const lines = text.trim().split(/\r?\n/).filter(l => l.trim());
+  const rows = [];
   lines.forEach(line => {
     const parts = line.split(',');
-    if (parts.length < 7) return;
-    // skip header row if present
-    if (parts[0].toLowerCase() === 'date') return;
-    for (let i = 1; i <= 7; i++) {
+    if (parts.length < 8) return;
+    if (parts[0].toLowerCase() === 'date') return; // skip header row
+    const main = [];
+    for (let i = 1; i <= 6; i++) {
       const n = parseInt(parts[i]);
-      if (n >= 1 && n <= 49) freqMap[n] = (freqMap[n] || 0) + 1;
+      if (n >= 1 && n <= 49) main.push(n);
     }
+    const extra = parseInt(parts[7]);
+    if (main.length !== 6 || !(extra >= 1 && extra <= 49)) return;
+    rows.push({ date: parts[0].trim(), ts: parseDate(parts[0]), main, extra });
   });
-  totalDraws = lines.filter(l => !l.startsWith('date')).length;
+  // Chronological order: oldest first. This matters for lookback windows.
+  rows.sort((a, b) => a.ts - b.ts);
+  allDraws = rows;
+  recomputeFreq();
+}
+
+// Frequency count (main + extra numbers) over a slice of chronological draws.
+function freqFromDraws(drawList) {
+  const f = {};
+  for (let n = 1; n <= 49; n++) f[n] = 0;
+  drawList.forEach(d => {
+    d.main.forEach(n => f[n]++);
+    f[d.extra]++;
+  });
+  return f;
+}
+
+// Most recent N draws (or all), taken from the END of the chronological array.
+function lookbackSlice(drawList, lookback) {
+  if (lookback === 'all' || !lookback || lookback >= drawList.length) return drawList;
+  return drawList.slice(drawList.length - lookback);
+}
+
+function recomputeFreq() {
+  const windowDraws = lookbackSlice(allDraws, currentLookback);
+  freqMap = freqFromDraws(windowDraws);
+  totalDraws = windowDraws.length;
 }
 
 async function loadCSV() {
@@ -493,31 +562,72 @@ async function loadCSV() {
     if (!res.ok) throw new Error('CSV not found');
     const text = await res.text();
     parseLines(text);
-    showStatus(`已從 history.csv 載入 ${totalDraws} 期數據，請按「開獎」`, '');
+    showStatus(`已從 history.csv 載入共 ${allDraws.length} 期數據（分析最近 ${totalDraws} 期），請按「開獎」`, '');
   } catch (e) {
     // Fallback to hardcoded data if CSV not available (e.g. running locally)
     parseLines(FALLBACK_DATA);
-    showStatus(`已載入 ${totalDraws} 期備用數據，請按「開獎」`, '');
+    showStatus(`已載入 ${allDraws.length} 期備用數據（分析最近 ${totalDraws} 期），請按「開獎」`, '');
   }
+  syncLookbackOptions();
   buildStatsGrid();
 }
 
+function syncLookbackOptions() {
+  const sel = document.getElementById('lookback-sel');
+  [...sel.options].forEach(opt => {
+    if (opt.value === 'all') return;
+    opt.disabled = parseInt(opt.value) >= allDraws.length;
+  });
+}
+
+// ── Advanced settings panel (hidden by default) ─────────────────────
+function toggleAdvanced() {
+  const panel = document.getElementById('adv-panel');
+  const isHidden = panel.style.display === 'none';
+  panel.style.display = isHidden ? 'block' : 'none';
+}
+function onAdvChange() {
+  const v = document.getElementById('lookback-sel').value;
+  currentLookback = v === 'all' ? 'all' : parseInt(v);
+  recomputeFreq();
+  buildStatsGrid();
+}
+function onStrengthInput() {
+  currentStrength = parseInt(document.getElementById('strength-sel').value);
+  document.getElementById('strength-val').textContent = currentStrength + '%';
+}
+// Apply mode-specific default lookback/strength, then reflect them in the (hidden) advanced UI.
+function applyModeDefaults(m) {
+  if (m === 'hot')  { currentLookback = 20;  currentStrength = 80; }
+  if (m === 'cold') { currentLookback = 'all'; currentStrength = 80; }
+  const lbSel = document.getElementById('lookback-sel');
+  if (lbSel) lbSel.value = String(currentLookback);
+  const strSel = document.getElementById('strength-sel');
+  if (strSel) strSel.value = currentStrength;
+  const strVal = document.getElementById('strength-val');
+  if (strVal) strVal.textContent = currentStrength + '%';
+  recomputeFreq();
+}
+
 // ── Probability weighting ─────────────────────────────────────────
+// strength: 0–100. 0 = identical to equal weighting. 100 = most extreme hot/cold skew.
 function buildWeights(mode, excludeSet) {
+  const s = currentStrength / 100;
   const pool = Array.from({length:49},(_,i)=>i+1).filter(n => !excludeSet.has(n));
-  if (mode === 'equal') {
+  if (mode === 'equal' || s <= 0) {
     return pool.map(n => ({ n, w: 1 }));
   }
   const counts = pool.map(n => ({ n, c: freqMap[n] || 0 }));
   const maxC = Math.max(...counts.map(x => x.c)) || 1;
   const minC = Math.min(...counts.map(x => x.c)) || 0;
   const range = maxC - minC || 1;
+  // boost range scales with strength: at s=1, weights span 0.2–1.8 (as before);
+  // at s=0, every weight collapses to 1 (equal).
   return counts.map(({ n, c }) => {
-    // normalise 0–1 then boost to 0.2–1.8 range so rare/frequent balls
-    // have meaningful but not extreme bias
     const norm = (c - minC) / range;  // 0=coldest, 1=hottest
-    const w = mode === 'hot' ? 0.2 + norm * 1.6 : 0.2 + (1 - norm) * 1.6;
-    return { n, w };
+    const skew = mode === 'hot' ? norm : (1 - norm);
+    const w = 1 + (skew - 0.5) * 1.6 * s;
+    return { n, w: Math.max(0.02, w) };
   });
 }
 
@@ -580,8 +690,8 @@ function pickNumbers() {
 // ── Mode toggle ───────────────────────────────────────────────────
 const modeDescs = {
   equal: '每個號碼機率相同（1/49）',
-  hot:   '🔥 出現次數越多，被抽中機率越高',
-  cold:  '❄️ 出現次數越少，被抽中機率越高'
+  hot:   '🔥 出現次數越多，被抽中機率越高（預設：最近20期／80%強度）',
+  cold:  '❄️ 出現次數越少，被抽中機率越高（預設：全部歷史／80%強度）'
 };
 function setMode(m) {
   currentMode = m;
@@ -592,6 +702,8 @@ function setMode(m) {
   document.getElementById('mode-desc').textContent = modeDescs[m];
   const bar = document.getElementById('stats-bar');
   bar.classList.toggle('visible', m !== 'equal');
+  applyModeDefaults(m);
+  buildStatsGrid();
 }
 
 // ── Stats heatmap ─────────────────────────────────────────────────
@@ -619,7 +731,7 @@ function buildStatsGrid() {
     grid.appendChild(cell);
   }
   document.getElementById('stats-title').textContent =
-    `📊 歷史出現次數（共 ${totalDraws} 期，顏色越深 = 出現越多）`;
+    `📊 ${currentLookback==='all' ? '全部歷史' : '最近 '+currentLookback+' 期'}出現次數（共 ${totalDraws} 期，顏色越深 = 出現越多）`;
 }
 
 // ── Number grid ───────────────────────────────────────────────────
